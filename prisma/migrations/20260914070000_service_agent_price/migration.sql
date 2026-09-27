@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Service" ADD COLUMN     "agentPrice" DOUBLE PRECISION NOT NULL DEFAULT 0;

@@ -1,0 +1,525 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  logo      String?
+  address   String?
+  mobile    String?
+  email     String?
+  gstin     String?
+  website   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches         Branch[]
+  users            User[]
+  customers        Customer[]
+  services         Service[]
+  activityLogs     ActivityLog[]
+  businessSettings BusinessSetting?
+}
+
+model Branch {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  code           String       @unique
+  address        String?
+  mobile         String?
+  email          String?
+  isMain         Boolean      @default(false)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  users         User[]
+  customers     Customer[]
+  works         Work[]
+  payments      Payment[]
+  expenses      Expense[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+
+  @@index([organizationId])
+}
+
+model User {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branchId       String?
+  branch         Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  name           String
+  email          String       @unique
+  mobile         String?      @unique
+  passwordHash   String
+  role           String       @default("EMPLOYEE") // ADMIN, EMPLOYEE, AGENT
+  isActive       Boolean      @default(true)
+  avatar         String?
+  businessName   String? // For AGENT
+  commissionRate Float?       @default(0) // Percentage or fixed rate for AGENT
+  supervisorId   String? // For AGENT: the Employee they work under
+  supervisor     User?   @relation("UserSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
+  subordinates   User[]  @relation("UserSupervisor")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  assignedWorks     Work[]              @relation("WorkAssignee")
+  agentWorks        Work[]              @relation("WorkAgent")
+  agentCustomers    Customer[]          @relation("CustomerAgent")
+  createdCustomers  Customer[]          @relation("CustomerCreator")
+  handledCustomers  Customer[]          @relation("CustomerEmployee")
+  collectedPayments Payment[]           @relation("PaymentCollector")
+  expenses          Expense[]           @relation("ExpenseAuthor")
+  statusHistories   WorkStatusHistory[]
+  activityLogs      ActivityLog[]
+  notifications     Notification[]
+  sentMessages      WhatsAppMessage[]
+  permissions       UserPermission[]
+  uploadedFiles     FileAsset[]         @relation("FileAssetUploader")
+
+  @@index([email])
+  @@index([role])
+  @@index([branchId])
+  @@index([organizationId])
+  @@index([supervisorId])
+}
+
+model UserPermission {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, permission])
+  @@index([userId])
+}
+
+model Customer {
+  id              String       @id @default(uuid())
+  customerId      String       @unique // e.g. CUS-2026-00001
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branchId        String
+  branch          Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  agentId         String?
+  agent           User?        @relation("CustomerAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  employeeId      String?
+  employee        User?        @relation("CustomerEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+  createdById     String?
+  createdBy       User?        @relation("CustomerCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  name            String
+  mobile          String
+  alternateMobile String?
+  email           String?
+  dob             DateTime?
+  gender          String? // Male, Female, Other
+  address         String?
+  area            String?
+  city            String?
+  state           String?
+  pincode         String?
+  notes           String?
+  isDeleted       Boolean      @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  works            Work[]
+  payments         Payment[]
+  receipts         Receipt[]
+  whatsAppMessages WhatsAppMessage[]
+  fileAssets       FileAsset[]       @relation("CustomerFileAssets")
+
+  @@index([name])
+  @@index([mobile])
+  @@index([customerId])
+  @@index([branchId])
+  @@index([agentId])
+  @@index([employeeId])
+}
+
+model ServiceCategory {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  order       Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  services    Service[]
+
+  @@index([name])
+}
+
+model Service {
+  id             String           @id @default(uuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  categoryId     String?
+  category       ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  name           String // e.g. "PAN New", "PAN Correction", "Fresh Passport"
+  description    String?
+  employeeInstructions String? // internal operator reference, not customer-facing
+  serviceType    String           @default("NEW") // NEW, CORRECTION, RENEWAL, REPRINT, PRINT
+  passwordRequired Boolean        @default(false) // agent must enter document password at apply
+  uploadRequired   Boolean        @default(false) // files compulsory at apply (separate from doc Required/Optional)
+  customerPrice  Float            @default(0) // Amount (₹) — customer/staff rate
+  agentPrice     Float            @default(0) // agent rate (0 = fall back to customerPrice)
+  estimatedDays  Int              @default(1)
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  requiredDocuments ServiceRequiredDocument[]
+  correctionOptions ServiceCorrectionOption[]
+  customFields      ServiceCustomField[]
+  works             Work[]
+
+  @@index([name])
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([serviceType])
+}
+
+model ServiceRequiredDocument {
+  id          String   @id @default(uuid())
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  isRequired  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([serviceId])
+}
+
+model ServiceCorrectionOption {
+  id        String   @id @default(uuid())
+  serviceId String
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  name      String // e.g. "Name", "Father's Name", "Date of Birth"
+  note      String? // optional internal note for the operator
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([serviceId])
+}
+
+model ServiceCustomField {
+  id             String   @id @default(uuid())
+  serviceId      String
+  service        Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  fieldKey       String // e.g. name, father_name, gender, dob, address
+  label          String // e.g. "Father Name"
+  labelMr        String? // Marathi label, e.g. "वडिलांचे नाव"
+  fieldType      String   @default("TEXT") // TEXT, TEXTAREA, PHONE, DATE, SELECT
+  options        String? // JSON array for SELECT, e.g. ["Male","Female","Other"]
+  isRequired     Boolean  @default(true)
+  marathiEnabled Boolean  @default(false) // collect Marathi value alongside English
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  @@unique([serviceId, fieldKey])
+  @@index([serviceId])
+}
+
+model WorkCustomFieldValue {
+  id        String   @id @default(uuid())
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  fieldKey  String
+  label     String // snapshot of master label
+  value     String
+  valueMr   String? // Marathi value snapshot
+  createdAt DateTime @default(now())
+
+  @@index([workId])
+}
+
+model Work {
+  id                      String    @id @default(uuid())
+  workId                  String    @unique // e.g. WORK-2026-00001
+  customerId              String
+  customer                Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  serviceId               String
+  service                 Service   @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  selectedOptions         String? // JSON snapshot string storing selected options [{ id, name, priceModifier }]
+  branchId                String
+  branch                  Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  assignedUserId          String?
+  assignedUser            User?     @relation("WorkAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  agentId                 String?
+  agent                   User?     @relation("WorkAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  status                  String    @default("NEW") // NEW, DOCUMENTS_REQUIRED, DOCUMENTS_RECEIVED, IN_PROGRESS, SUBMITTED, UNDER_PROCESS, COMPLETED, DELIVERED, ON_HOLD, CANCELLED
+  priority                String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  dueDate                 DateTime?
+  totalAmount             Float     @default(0)
+  paidAmount              Float     @default(0)
+  pendingAmount           Float     @default(0)
+  notes                   String?
+  trackingReferenceNumber String?
+  documentPassword        String? // customer document/PDF password collected at apply (staff use only)
+  documentsReceivedDate   DateTime?
+  appliedDate             DateTime?
+  deliveryDate            DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  documents        WorkDocument[]
+  statusHistories  WorkStatusHistory[]
+  payments         Payment[]
+  receipts         Receipt[]
+  customFieldValues WorkCustomFieldValue[]
+  whatsAppMessages WhatsAppMessage[]
+  fileAssets       FileAsset[]         @relation("WorkFileAssets")
+
+  @@index([workId])
+  @@index([customerId])
+  @@index([serviceId])
+  @@index([assignedUserId])
+  @@index([agentId])
+  @@index([status])
+  @@index([branchId])
+  @@index([trackingReferenceNumber])
+  @@index([appliedDate])
+  @@index([deliveryDate])
+}
+
+model WorkDocument {
+  id               String    @id @default(uuid())
+  workId           String
+  work             Work      @relation(fields: [workId], references: [id], onDelete: Cascade)
+  documentName     String
+  state            String    @default("REQUIRED") // REQUIRED, UPLOADED, VERIFIED, REJECTED
+  fileUrl          String?
+  fileName         String?
+  fileSize         Int?
+  mimeType         String?
+  rejectionReason  String?
+  verifiedByUserId String?
+  verifiedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([workId])
+}
+
+model WorkStatusHistory {
+  id              String   @id @default(uuid())
+  workId          String
+  work            Work     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  previousStatus  String
+  newStatus       String
+  changedByUserId String?
+  changedByUser   User?    @relation(fields: [changedByUserId], references: [id], onDelete: SetNull)
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  @@index([workId])
+  @@index([changedByUserId])
+}
+
+model Payment {
+  id                String   @id @default(uuid())
+  paymentId         String   @unique // e.g. PAY-2026-00001
+  workId            String
+  work              Work     @relation(fields: [workId], references: [id], onDelete: Restrict)
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  branchId          String
+  branch            Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  collectedByUserId String?
+  collectedByUser   User?    @relation("PaymentCollector", fields: [collectedByUserId], references: [id], onDelete: SetNull)
+  amount            Float
+  paymentMethod     String   @default("CASH") // CASH, UPI, BANK_TRANSFER, CARD, OTHER
+  transactionId     String?
+  status            String   @default("PAID") // PAID, PARTIAL, REFUNDED
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  receipt Receipt?
+
+  @@index([paymentId])
+  @@index([workId])
+  @@index([customerId])
+  @@index([branchId])
+  @@index([createdAt])
+}
+
+model Receipt {
+  id            String   @id @default(uuid())
+  receiptNumber String   @unique // e.g. REC-2026-00001
+  paymentId     String   @unique
+  payment       Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  workId        String
+  work          Work     @relation(fields: [workId], references: [id], onDelete: Restrict)
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  totalAmount   Float
+  paidAmount    Float
+  pendingAmount Float
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([receiptNumber])
+  @@index([workId])
+  @@index([customerId])
+}
+
+model ExpenseCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  expenses Expense[]
+}
+
+model Expense {
+  id            String          @id @default(uuid())
+  expenseId     String          @unique // e.g. EXP-2026-00001
+  categoryId    String
+  category      ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  branchId      String
+  branch        Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  addedByUserId String?
+  addedByUser   User?           @relation("ExpenseAuthor", fields: [addedByUserId], references: [id], onDelete: SetNull)
+  amount        Float
+  paymentMethod String          @default("CASH") // CASH, UPI, BANK_TRANSFER, CARD, OTHER
+  description   String
+  notes         String?
+  isDeleted     Boolean         @default(false)
+  deletedAt     DateTime?
+  expenseDate   DateTime        @default(now())
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([expenseId])
+  @@index([categoryId])
+  @@index([branchId])
+  @@index([expenseDate])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  title     String
+  message   String
+  type      String   @default("SYSTEM")
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model WhatsAppTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique // WORK_CREATED, PAYMENT_RECEIVED, etc.
+  body      String
+  variables String // JSON string of variable names e.g. ["customer_name", "work_id"]
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WhatsAppMessage {
+  id              String    @id @default(uuid())
+  recipientMobile String
+  recipientName   String?
+  templateCode    String?
+  messageBody     String
+  status          String    @default("PENDING") // PENDING, SENT, DELIVERED, READ, FAILED
+  workId          String?
+  work            Work?     @relation(fields: [workId], references: [id], onDelete: SetNull)
+  customerId      String?
+  customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  sentByUserId    String?
+  sentByUser      User?     @relation(fields: [sentByUserId], references: [id], onDelete: SetNull)
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+
+  @@index([recipientMobile])
+  @@index([workId])
+  @@index([customerId])
+}
+
+model ActivityLog {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branchId       String?
+  branch         Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  userId         String?
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action         String // e.g. CUSTOMER_CREATED, WORK_STATUS_CHANGED, PAYMENT_CREATED
+  entity         String // Customer, Work, Payment, etc.
+  entityId       String
+  metadata       String? // JSON string of extra context
+  previousValue  String? // JSON or string
+  newValue       String? // JSON or string
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model BusinessSetting {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessName   String       @default("AL-HADI ENTERPRISE")
+  tagline        String?      @default("CSC & Citizen Service Center")
+  logoUrl        String?
+  address        String?      @default("Main Road, Near Bus Stand, Center Market")
+  mobile         String?      @default("+91 9823456789")
+  email          String?      @default("contact@alhadienterprise.com")
+  gstin          String?      @default("27AAAAA0000A1Z5")
+  website        String?      @default("https://alhadienterprise.com")
+  receiptPrefix  String       @default("REC")
+  receiptTerms   String?      @default("1. All payments are non-refundable once the application is submitted to government portals.\n2. Please preserve this receipt for all future tracking and physical document collection.")
+  receiptFooter  String?      @default("Thank you for choosing AL-HADI ENTERPRISE. For any queries, contact our helpline.")
+  updatedAt      DateTime     @updatedAt
+}
+
+model FileAsset {
+  id           String    @id @default(uuid())
+  storageKey   String    @unique
+  fileName     String
+  fileSize     Int
+  mimeType     String
+  storagePath  String
+  uploadedBy   String?
+  workId       String?
+  work         Work?     @relation("WorkFileAssets", fields: [workId], references: [id], onDelete: Cascade)
+  customerId   String?
+  customer     Customer? @relation("CustomerFileAssets", fields: [customerId], references: [id], onDelete: SetNull)
+  documentType String? // SERVICE_RECEIPT, CERTIFICATE, CUSTOMER_PHOTO
+  isCurrent    Boolean   @default(true)
+  uploader     User?     @relation("FileAssetUploader", fields: [uploadedBy], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+
+  @@index([workId, documentType, isCurrent])
+  @@index([customerId])
+}

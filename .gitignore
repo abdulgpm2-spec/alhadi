@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# Environment & secrets (NEVER commit real credentials)
+.env
+.env*.local
+
+# User-uploaded files (regrow at runtime; seeded separately)
+public/uploads/*
+
+# Local safety backups (migration snapshots, db dumps)
+backups/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
