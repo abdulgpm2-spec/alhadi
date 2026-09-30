@@ -383,6 +383,56 @@ export default function WorkDetailsPage() {
   const canEditDates = hasPermission(PERMISSIONS.WORK_DATES_UPDATE);
   const canUpdateStatus = hasPermission(PERMISSIONS.WORK_STATUS_UPDATE);
   const canCollectPayment = hasPermission(PERMISSIONS.PAYMENTS_CREATE);
+  const canManageCosts = hasPermission(PERMISSIONS.WORK_UPDATE);
+  const [costLabel, setCostLabel] = useState("");
+  const [costAmount, setCostAmount] = useState("");
+  const [costBusy, setCostBusy] = useState(false);
+
+  const handleAddCost = useCallback(async () => {
+    if (!costLabel.trim()) {
+      toast.error("Enter a cost label (e.g. Postman delivery)");
+      return;
+    }
+    const amountNum = parseFloat(costAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast.error("Enter a valid cost amount greater than zero");
+      return;
+    }
+    setCostBusy(true);
+    try {
+      const res = await fetch(`/api/work/${work.id}/costs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: costLabel.trim(), amount: amountNum }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Failed to add cost");
+      toast.success(`Cost "${costLabel.trim()}" of ₹${amountNum} added — profit updated`);
+      setCostLabel("");
+      setCostAmount("");
+      fetchWork();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add cost");
+    } finally {
+      setCostBusy(false);
+    }
+  }, [work, costLabel, costAmount, fetchWork]);
+
+  const handleDeleteCost = useCallback(async (costId: string) => {
+    if (!confirm("Remove this cost entry? Profit will update.")) return;
+    setCostBusy(true);
+    try {
+      const res = await fetch(`/api/work/${work.id}/costs/${costId}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Failed to remove cost");
+      toast.success("Cost entry removed — profit updated");
+      fetchWork();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to remove cost");
+    } finally {
+      setCostBusy(false);
+    }
+  }, [work, fetchWork]);
   const canVerifyDocs = hasPermission(PERMISSIONS.DOCUMENTS_VERIFY);
   const canRejectDocs = hasPermission(PERMISSIONS.DOCUMENTS_REJECT);
   // Document upload is Employee/Agent only — Admins can view/download but never upload.
@@ -492,8 +542,8 @@ export default function WorkDetailsPage() {
           </div>
         </div>
 
-        {/* Milestone Meta Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-100 text-xs">
+        {/* Milestone Meta Bar (profit hidden from agents) */}
+        <div className={`grid grid-cols-2 ${me?.role === "AGENT" ? "sm:grid-cols-4" : "sm:grid-cols-5"} gap-3 mt-6 pt-5 border-t border-slate-100 text-xs`}>
           <div>
             <span className="text-slate-400 block text-[11px]">Created Date</span>
             <span className="font-bold text-slate-800">{formatDate(work.createdAt)}</span>
@@ -514,6 +564,15 @@ export default function WorkDetailsPage() {
               {formatCurrency(work.pendingAmount)}
             </span>
           </div>
+          {me?.role !== "AGENT" && (
+            <div title="Billed minus service cost (govt fee + other)">
+              <span className="text-slate-400 block text-[11px]">Profit</span>
+              <span className={`font-bold ${(Number(work.totalAmount) || 0) - (Number(work.serviceCost) || 0) >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
+                {formatCurrency((Number(work.totalAmount) || 0) - (Number(work.serviceCost) || 0))}
+              </span>
+              <span className="block text-[10px] text-slate-400">cost {formatCurrency(Number(work.serviceCost) || 0)}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -825,6 +884,94 @@ export default function WorkDetailsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Cost Breakdown (staff-only: agents never see/manage margins) */}
+          {me?.role !== "AGENT" && (
+          <Card className="border-slate-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-bold text-slate-800">Service Cost Breakdown</CardTitle>
+              <CardDescription className="text-xs">
+                Actual kharcha (govt fee, postman, printing...) — add anytime, profit live update hoga
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 pt-0 space-y-2.5 text-xs">
+              {(work.costEntries || []).length === 0 && (
+                <p className="text-[11px] text-slate-400 italic">No cost recorded yet.</p>
+              )}
+              {(work.costEntries || []).map((c: any) => (
+                <div key={c.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-slate-800 block truncate">{c.label}</span>
+                    <span className="text-[10px] text-slate-400 block">
+                      {c.createdBy?.name ? `by ${c.createdBy.name} • ` : ""}{formatDate(c.createdAt)}
+                    </span>
+                  </div>
+                  <span className="font-bold text-slate-900 shrink-0">{formatCurrency(c.amount)}</span>
+                  {canManageCosts && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCost(c.id)}
+                      disabled={costBusy}
+                      className="text-slate-400 hover:text-rose-600 transition-colors shrink-0 disabled:opacity-50"
+                      title="Remove cost entry"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <div className="flex items-center justify-between px-2.5 py-2 rounded-lg bg-emerald-50/60 border border-emerald-100">
+                <span className="font-bold text-slate-700">Total Cost</span>
+                <span className="font-black text-slate-900">{formatCurrency(Number(work.serviceCost) || 0)}</span>
+              </div>
+              {canManageCosts && (
+                <div className="space-y-2 pt-1">
+                  <div className="flex flex-wrap gap-1.5">
+                    {["Government fee", "Postman / Delivery", "Printing", "Travel"].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setCostLabel(preset)}
+                        className={`px-2 py-1 rounded-full text-[10px] font-semibold border transition-colors ${
+                          costLabel === preset
+                            ? "bg-emerald-600 border-emerald-600 text-white"
+                            : "bg-white border-slate-200 text-slate-600 hover:border-emerald-300"
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Cost label (e.g. Postman delivery)"
+                      value={costLabel}
+                      onChange={(e) => setCostLabel(e.target.value)}
+                      className="h-8 text-xs flex-1"
+                    />
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="₹"
+                      value={costAmount}
+                      onChange={(e) => setCostAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                      className="h-8 text-xs w-24 font-bold"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleAddCost}
+                      disabled={costBusy}
+                      className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shrink-0"
+                    >
+                      {costBusy ? "Saving..." : "Add"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          )}
 
           {/* Section 2: Payments & Receipts */}
           <Card className="border-slate-200">

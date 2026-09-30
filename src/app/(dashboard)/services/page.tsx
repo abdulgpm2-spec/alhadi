@@ -142,6 +142,8 @@ function ServicesContent() {
     uploadRequired: boolean;
     customerPrice: number;
     agentPrice: number;
+    govtFee: number;
+    otherCost: number;
     estimatedDays: number;
     description: string;
     employeeInstructions: string;
@@ -156,6 +158,8 @@ function ServicesContent() {
     uploadRequired: false,
     customerPrice: 0,
     agentPrice: 0,
+    govtFee: 0,
+    otherCost: 0,
     estimatedDays: 3,
     description: "",
     employeeInstructions: "",
@@ -664,6 +668,8 @@ function ServicesContent() {
       uploadRequired: false,
       customerPrice: 150,
       agentPrice: 100,
+      govtFee: 0,
+      otherCost: 0,
       estimatedDays: 3,
       description: "",
       employeeInstructions: "",
@@ -697,6 +703,8 @@ function ServicesContent() {
       uploadRequired: Boolean(srv.uploadRequired),
       customerPrice: srv.customerPrice || 0,
       agentPrice: srv.agentPrice || 0,
+      govtFee: srv.govtFee || 0,
+      otherCost: srv.otherCost || 0,
       estimatedDays: srv.estimatedDays || 3,
       description: srv.description || "",
       employeeInstructions: srv.employeeInstructions || "",
@@ -1521,6 +1529,42 @@ function ServicesContent() {
                         className="h-8 text-xs font-bold"
                       />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:col-span-2">
+                    <div className="space-y-1.5">
+                      <label className="font-semibold text-slate-700">Govt Fee (₹) — cost</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="e.g. 107"
+                        value={serviceForm.govtFee}
+                        onChange={(e) =>
+                          setServiceForm({ ...serviceForm, govtFee: parseFloat(e.target.value) || 0 })
+                        }
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="font-semibold text-slate-700">Other Cost (₹) — printing, travel</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="e.g. 30"
+                        value={serviceForm.otherCost}
+                        onChange={(e) =>
+                          setServiceForm({ ...serviceForm, otherCost: parseFloat(e.target.value) || 0 })
+                        }
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div className="sm:col-span-2 px-3 py-2 rounded-lg bg-emerald-50/60 border border-emerald-100 text-[11px] text-emerald-900">
+                    Total cost: <span className="font-black">{formatCurrency((serviceForm.govtFee || 0) + (serviceForm.otherCost || 0))}</span>
+                    {"  "}• Margin @ customer rate:{" "}
+                    <span className="font-black">{formatCurrency((serviceForm.customerPrice || 0) - (serviceForm.govtFee || 0) - (serviceForm.otherCost || 0))}</span>
+                    {"  "}• Margin @ agent rate:{" "}
+                    <span className="font-black">{formatCurrency((serviceForm.agentPrice || 0) - (serviceForm.govtFee || 0) - (serviceForm.otherCost || 0))}</span>
                   </div>
 
                   <div className="space-y-1.5">

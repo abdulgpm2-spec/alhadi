@@ -36,6 +36,16 @@ const DashboardCharts = dynamic(() => import("@/components/common/DashboardChart
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [myRole, setMyRole] = useState("");
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.success && j.data?.user) setMyRole(j.data.user.role || "");
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchDashboard = async () => {
     try {
@@ -104,7 +114,7 @@ export default function DashboardPage() {
       />
 
       {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${myRole === "AGENT" ? "lg:grid-cols-3" : "lg:grid-cols-4"} gap-4`}>
         <StatCard
           title="Total Customers"
           value={kpis.totalCustomers || 0}
@@ -127,14 +137,16 @@ export default function DashboardPage() {
           icon={CreditCard}
           variant="emerald"
         />
-        <StatCard
-          title="Monthly Net Profit"
-          value={kpis.monthlyNetProfit || 0}
-          isCurrency
-          subtitle={`Total Expenses: ${formatCurrency(kpis.monthlyExpense || 0)}`}
-          icon={TrendingUp}
-          variant={kpis.monthlyNetProfit >= 0 ? "emerald" : "rose"}
-        />
+        {myRole !== "AGENT" && (
+          <StatCard
+            title="Monthly Net Profit"
+            value={kpis.monthlyNetProfit || 0}
+            isCurrency
+            subtitle={`Total Expenses: ${formatCurrency(kpis.monthlyExpense || 0)}`}
+            icon={TrendingUp}
+            variant={kpis.monthlyNetProfit >= 0 ? "emerald" : "rose"}
+          />
+        )}
       </div>
 
       {/* Secondary Financial Summary Bar */}

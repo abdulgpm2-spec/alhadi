@@ -81,6 +81,7 @@ model User {
   handledCustomers  Customer[]          @relation("CustomerEmployee")
   collectedPayments Payment[]           @relation("PaymentCollector")
   expenses          Expense[]           @relation("ExpenseAuthor")
+  authoredCosts     WorkCostEntry[]     @relation("CostEntryAuthor")
   statusHistories   WorkStatusHistory[]
   activityLogs      ActivityLog[]
   notifications     Notification[]
@@ -177,6 +178,8 @@ model Service {
   uploadRequired   Boolean        @default(false) // files compulsory at apply (separate from doc Required/Optional)
   customerPrice  Float            @default(0) // Amount (₹) — customer/staff rate
   agentPrice     Float            @default(0) // agent rate (0 = fall back to customerPrice)
+  govtFee        Float            @default(0) // government/portal fee per application (cost)
+  otherCost      Float            @default(0) // printing, travel, misc per application (cost)
   estimatedDays  Int              @default(1)
   isActive       Boolean          @default(true)
   createdAt      DateTime         @default(now())
@@ -248,6 +251,19 @@ model WorkCustomFieldValue {
   @@index([workId])
 }
 
+model WorkCostEntry {
+  id        String   @id @default(uuid())
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  label     String // e.g. Government fee, Postman delivery, Printing
+  amount    Float
+  createdByUserId String?
+  createdBy User?    @relation("CostEntryAuthor", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([workId])
+}
+
 model Work {
   id                      String    @id @default(uuid())
   workId                  String    @unique // e.g. WORK-2026-00001
@@ -268,6 +284,7 @@ model Work {
   totalAmount             Float     @default(0)
   paidAmount              Float     @default(0)
   pendingAmount           Float     @default(0)
+  serviceCost             Float     @default(0) // snapshot of govtFee+otherCost at creation (profit = total - cost)
   notes                   String?
   trackingReferenceNumber String?
   documentPassword        String? // customer document/PDF password collected at apply (staff use only)
@@ -282,6 +299,7 @@ model Work {
   payments         Payment[]
   receipts         Receipt[]
   customFieldValues WorkCustomFieldValue[]
+  costEntries      WorkCostEntry[]
   whatsAppMessages WhatsAppMessage[]
   fileAssets       FileAsset[]         @relation("WorkFileAssets")
 

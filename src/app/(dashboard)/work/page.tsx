@@ -403,9 +403,9 @@ export default function WorkOrdersPage() {
         }
       />
 
-      {/* Team command strip — scoped summary (click a card to filter) */}
+      {/* Team command strip — scoped summary (click a card to filter; profit staff-only) */}
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className={`grid grid-cols-2 ${myRole === "AGENT" ? "sm:grid-cols-4" : "sm:grid-cols-5"} gap-2.5`}>
           <button
             type="button"
             onClick={showAllOrders}
@@ -438,6 +438,15 @@ export default function WorkOrdersPage() {
             <span className="font-black text-rose-700 text-lg">{formatCurrency(summary.pendingAmount || 0)}</span>
             <span className="block text-[10px] text-slate-400">{summary.pendingWorks || 0} order(s) unpaid</span>
           </div>
+          {myRole !== "AGENT" && (
+            <div className="p-3 rounded-lg border bg-white border-slate-200" title="Billed minus service cost">
+              <span className="text-[10px] text-slate-400 font-semibold block uppercase">Profit</span>
+              <span className={`font-black text-lg ${(summary.profit || 0) >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
+                {formatCurrency(summary.profit || 0)}
+              </span>
+              <span className="block text-[10px] text-slate-400">cost {formatCurrency(summary.cost || 0)}</span>
+            </div>
+          )}
         </div>
       )}
 

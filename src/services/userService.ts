@@ -65,7 +65,7 @@ export async function getAgents(user: SessionUser) {
       supervisor: { select: { id: true, name: true } },
       agentCustomers: { where: { isDeleted: false }, select: { id: true } },
       agentWorks: {
-        select: { id: true, status: true, totalAmount: true, paidAmount: true },
+        select: { id: true, status: true, totalAmount: true, paidAmount: true, serviceCost: true },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -77,6 +77,8 @@ export async function getAgents(user: SessionUser) {
     const completedCount = ag.agentWorks.filter((w) => ["COMPLETED", "DELIVERED"].includes(w.status)).length;
     const pendingCount = workCount - completedCount;
     const totalRevenue = ag.agentWorks.reduce((acc, w) => acc + w.paidAmount, 0);
+    const totalCost = ag.agentWorks.reduce((acc, w) => acc + (Number(w.serviceCost) || 0), 0);
+    const totalBilled = ag.agentWorks.reduce((acc, w) => acc + w.totalAmount, 0);
 
     return {
       id: ag.id,
@@ -95,6 +97,9 @@ export async function getAgents(user: SessionUser) {
       completedCount,
       pendingCount,
       totalRevenue,
+      totalCost,
+      totalBilled,
+      profit: totalBilled - totalCost,
       createdAt: ag.createdAt,
     };
   });

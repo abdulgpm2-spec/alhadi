@@ -293,6 +293,8 @@ export async function createCustomer(data: {
     id: string;
     name: string;
     customerPrice: number;
+    govtFee: number;
+    otherCost: number;
     estimatedDays: number;
     requiredDocuments: Array<{ name: string }>;
     correctionOptions: Array<{ id: string; name: string; isActive: boolean }>;
@@ -341,6 +343,7 @@ export async function createCustomer(data: {
     {
       const workId = await generateWorkId();
       const price = shares[i];
+      const cost = (Number(srv.govtFee) || 0) + (Number(srv.otherCost) || 0);
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + (srv.estimatedDays || 3));
 
@@ -372,10 +375,23 @@ export async function createCustomer(data: {
           totalAmount: price,
           paidAmount: 0,
           pendingAmount: price,
+          serviceCost: cost,
           notes: `Application for Master Service: ${srv.name}`,
           documentPassword: data.documentPassword?.trim() || null,
         },
       });
+
+      // Seed cost entries from master so staff sees the breakdown and can add more later
+      if ((Number(srv.govtFee) || 0) > 0) {
+        await prisma.workCostEntry.create({
+          data: { workId: work.id, label: "Government fee", amount: Math.round((Number(srv.govtFee) || 0) * 100) / 100, createdByUserId: data.user.id },
+        });
+      }
+      if ((Number(srv.otherCost) || 0) > 0) {
+        await prisma.workCostEntry.create({
+          data: { workId: work.id, label: "Other cost", amount: Math.round((Number(srv.otherCost) || 0) * 100) / 100, createdByUserId: data.user.id },
+        });
+      }
 
       // Populate required document checklist
       for (const reqDoc of srv.requiredDocuments) {

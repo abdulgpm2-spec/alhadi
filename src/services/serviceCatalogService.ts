@@ -382,6 +382,8 @@ export async function createService(data: {
   uploadRequired?: boolean;
   customerPrice?: number;
   agentPrice?: number;
+  govtFee?: number;
+  otherCost?: number;
   estimatedDays?: number;
   description?: string;
   employeeInstructions?: string;
@@ -420,6 +422,8 @@ export async function createService(data: {
       employeeInstructions: data.employeeInstructions?.trim() || null,
       customerPrice: Number(data.customerPrice || 0),
       agentPrice: Number(data.agentPrice || 0),
+      govtFee: Number(data.govtFee || 0),
+      otherCost: Number(data.otherCost || 0),
       estimatedDays: Number(data.estimatedDays || 3),
       isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
     },
@@ -495,6 +499,8 @@ export async function updateService(
     uploadRequired: boolean;
     customerPrice: number;
     agentPrice: number;
+    govtFee: number;
+    otherCost: number;
     estimatedDays: number;
     description: string;
     employeeInstructions: string;
@@ -544,6 +550,8 @@ export async function updateService(
       uploadRequired: data.uploadRequired !== undefined ? Boolean(data.uploadRequired) : undefined,
       customerPrice: data.customerPrice !== undefined ? Number(data.customerPrice) : undefined,
       agentPrice: data.agentPrice !== undefined ? Number(data.agentPrice) : undefined,
+      govtFee: data.govtFee !== undefined ? Number(data.govtFee) : undefined,
+      otherCost: data.otherCost !== undefined ? Number(data.otherCost) : undefined,
       estimatedDays: data.estimatedDays !== undefined ? Number(data.estimatedDays) : undefined,
       description: data.description !== undefined ? data.description.trim() || null : undefined,
       employeeInstructions:

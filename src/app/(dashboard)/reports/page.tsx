@@ -154,7 +154,7 @@ export default function ReportsPage() {
           ) : (
             <>
               {/* Summary KPIs */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
                   title="Total Income Collected"
                   value={reportData?.summary?.totalIncome || 0}
@@ -179,7 +179,47 @@ export default function ReportsPage() {
                   icon={BarChart3}
                   variant={(reportData?.summary?.netProfit || 0) >= 0 ? "emerald" : "rose"}
                 />
+                <StatCard
+                  title="Service Profit (billed − cost)"
+                  value={reportData?.summary?.totalServiceProfit || 0}
+                  isCurrency
+                  subtitle="Unit economics across services"
+                  icon={FileSpreadsheet}
+                  variant={(reportData?.summary?.totalServiceProfit || 0) >= 0 ? "emerald" : "rose"}
+                />
               </div>
+
+              {/* Profit by Service */}
+              <Card className="border-slate-200">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Profit by Service (billed − govt fee − other cost)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="max-h-96 overflow-y-auto divide-y divide-slate-100 text-xs">
+                    {(reportData?.profitByService || []).length === 0 && (
+                      <p className="p-4 text-[11px] text-slate-400 italic">No billed work in this period.</p>
+                    )}
+                    {(reportData?.profitByService || []).map((r: any) => (
+                      <div key={r.serviceId} className="p-3 flex justify-between items-center hover:bg-slate-50 gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 truncate">{r.name}</p>
+                          <p className="text-[11px] text-slate-500">
+                            {r.category} • {r.orders} order(s) • billed {formatCurrency(r.billed)} • cost {formatCurrency(r.cost)}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className={`font-bold ${r.profit >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
+                            {formatCurrency(r.profit)}
+                          </span>
+                          <span className="block text-[10px] text-slate-400">profit</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Transactions Breakdown Tables */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -315,9 +355,12 @@ export default function ReportsPage() {
                           <p className="font-bold text-slate-900">{c.name} ({c.customerId})</p>
                           <p className="text-[11px] text-slate-500 font-mono">{c.mobile} • {c.area}</p>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right shrink-0">
                           <span className="font-bold text-slate-900">{c.workCount} orders</span>
-                          <span className="block text-[10px] text-emerald-700 font-semibold">{formatCurrency(c.totalSpent)}</span>
+                          <span className="block text-[10px] text-emerald-700 font-semibold">{formatCurrency(c.totalSpent)} spent</span>
+                          <span className={`block text-[10px] font-bold ${(c.profit || 0) >= 0 ? "text-sky-700" : "text-rose-600"}`}>
+                            {formatCurrency(c.profit || 0)} profit
+                          </span>
                         </div>
                       </div>
                     ))}

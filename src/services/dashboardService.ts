@@ -248,28 +248,36 @@ export async function getDashboardStats(user: SessionUser, branchId?: string) {
     });
   }
 
+  // Agents never see profit/loss or shop expenses — operational counts only.
+  // (Their income figures above are already scoped to their own works.)
+  const kpis: Record<string, any> = {
+    totalCustomers,
+    todayCustomers,
+    pendingWorkCount,
+    completedWorkCount,
+    totalWorkCount,
+    todayIncome,
+    monthlyIncome,
+    totalIncome,
+    pendingPayments,
+  };
+  const charts: Record<string, any> = {
+    incomeExpenseTrend: trendDays.map((d) => ({ date: d.date, income: d.income })),
+    serviceRevenue: serviceRevenueChart,
+    statusBreakdown: Object.entries(statusCounts).map(([status, count]) => ({ status, count })),
+  };
+  if (!isAgent) {
+    kpis.monthlyExpense = monthlyExpense;
+    kpis.totalExpense = totalExpense;
+    kpis.monthlyNetProfit = monthlyNetProfit;
+    kpis.totalNetProfit = totalNetProfit;
+    charts.incomeExpenseTrend = trendDays;
+    charts.expenseBreakdown = expenseCategoryChart;
+  }
+
   return {
-    kpis: {
-      totalCustomers,
-      todayCustomers,
-      pendingWorkCount,
-      completedWorkCount,
-      totalWorkCount,
-      todayIncome,
-      monthlyIncome,
-      totalIncome,
-      monthlyExpense,
-      totalExpense,
-      pendingPayments,
-      monthlyNetProfit,
-      totalNetProfit,
-    },
-    charts: {
-      incomeExpenseTrend: trendDays,
-      serviceRevenue: serviceRevenueChart,
-      statusBreakdown: Object.entries(statusCounts).map(([status, count]) => ({ status, count })),
-      expenseBreakdown: expenseCategoryChart,
-    },
+    kpis,
+    charts,
     recentWorks,
     recentActivities,
   };

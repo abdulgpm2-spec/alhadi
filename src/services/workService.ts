@@ -166,6 +166,26 @@ export async function getWorkSummary(params: {
     (counts.UNDER_PROCESS || 0);
   const done = (counts.COMPLETED || 0) + (counts.DELIVERED || 0);
 
+  // Profit internals stay server-side for agents (they track status, never margins)
+  if (params.user.role === "AGENT") {
+    return {
+      total,
+      active,
+      done,
+      onHold: counts.ON_HOLD || 0,
+      byStatus: counts,
+      pendingWorks: pendingAgg._count,
+      pendingAmount: pendingAgg._sum.pendingAmount || 0,
+    };
+  }
+
+  const moneyAgg = await prisma.work.aggregate({
+    where: whereClause,
+    _sum: { totalAmount: true, serviceCost: true },
+  });
+  const billed = moneyAgg._sum.totalAmount || 0;
+  const cost = moneyAgg._sum.serviceCost || 0;
+
   return {
     total,
     active,
@@ -176,6 +196,9 @@ export async function getWorkSummary(params: {
     pendingAmount: pendingAgg._sum.pendingAmount || 0,
     billedAmount: pendingAgg._sum.totalAmount || 0,
     collectedAmount: pendingAgg._sum.paidAmount || 0,
+    billed,
+    cost,
+    profit: billed - cost,
   };
 }
 
@@ -200,6 +223,10 @@ export async function getWorkById(id: string, user: SessionUser) {
         orderBy: { createdAt: "asc" },
       },
       customFieldValues: {
+        orderBy: { createdAt: "asc" },
+      },
+      costEntries: {
+        include: { createdBy: { select: { id: true, name: true } } },
         orderBy: { createdAt: "asc" },
       },
       statusHistories: {
@@ -232,6 +259,11 @@ export async function getWorkById(id: string, user: SessionUser) {
   });
 
   if (!work) return null;
+
+  // Agents track status, never margins: strip cost breakdown server-side
+  if (user.role === "AGENT") {
+    work.costEntries = [];
+  }
 
   return work;
 }
@@ -361,6 +393,15 @@ export async function createWork(data: {
   // Agents are billed at agent rate, staff/office at customer rate
   const basePrice =
     data.user.role === "AGENT" ? agentRateOf(service) : Number(service.customerPrice) || 0;
+  // Unit cost snapshot (govt fee + other) — historical truth even if master changes later
+  const unitCost = (Number(service.govtFee) || 0) + (Number(service.otherCost) || 0);
+  const seedCosts: Array<{ label: string; amount: number }> = [];
+  if ((Number(service.govtFee) || 0) > 0) {
+    seedCosts.push({ label: "Government fee", amount: Math.round((Number(service.govtFee) || 0) * 100) / 100 });
+  }
+  if ((Number(service.otherCost) || 0) > 0) {
+    seedCosts.push({ label: "Other cost", amount: Math.round((Number(service.otherCost) || 0) * 100) / 100 });
+  }
 
   const calculatedPrice = basePrice;
   const finalPrice = data.totalAmount !== undefined ? Number(data.totalAmount) : calculatedPrice;
@@ -391,10 +432,18 @@ export async function createWork(data: {
       totalAmount: finalPrice,
       paidAmount: 0,
       pendingAmount: finalPrice,
+      serviceCost: unitCost,
       notes: data.notes?.trim() || null,
       documentPassword: data.documentPassword?.trim() || null,
     },
   });
+
+  // Seed cost entries from master so staff sees the breakdown and can add more later
+  for (const c of seedCosts) {
+    await prisma.workCostEntry.create({
+      data: { workId: work.id, label: c.label, amount: c.amount, createdByUserId: data.user.id },
+    });
+  }
 
   // Create document checklist from required documents
   for (const doc of service.requiredDocuments) {
@@ -768,6 +817,90 @@ export async function attachWorkFile(
   }
 
   return attached;
+}
+
+async function resyncWorkCost(workId: string) {
+  const agg = await prisma.workCostEntry.aggregate({
+    where: { workId },
+    _sum: { amount: true },
+  });
+  const total = Math.round((agg._sum.amount || 0) * 100) / 100;
+  await prisma.work.update({ where: { id: workId }, data: { serviceCost: total } });
+  return total;
+}
+
+/**
+ * Adds an actual cost entry to a work order (e.g. postman delivery paid later).
+ * Staff-only (route enforces WORK_UPDATE); agents are rejected here as well.
+ * Work.serviceCost is re-synced so profit stays live everywhere.
+ */
+export async function addWorkCost(
+  workId: string,
+  data: { label: string; amount: number },
+  user: SessionUser
+) {
+  if (user.role === "AGENT") {
+    throw new Error("Only office staff can manage work costs.");
+  }
+  const work = await getAccessibleWork(workId, user);
+  if (!work) throw new Error("Work order not found");
+
+  const label = (data.label || "").trim();
+  const amount = Math.round((Number(data.amount) || 0) * 100) / 100;
+  if (!label) throw new Error("Cost label is required.");
+  if (!(amount > 0)) throw new Error("Cost amount must be greater than zero.");
+
+  const entry = await prisma.workCostEntry.create({
+    data: {
+      workId: work.id,
+      label: label.slice(0, 80),
+      amount,
+      createdByUserId: user.id,
+    },
+  });
+
+  const serviceCost = await resyncWorkCost(work.id);
+
+  await logActivity({
+    organizationId: user.organizationId,
+    branchId: work.branchId,
+    userId: user.id,
+    action: "WORK_COST_ADDED",
+    entity: "Work",
+    entityId: work.id,
+    metadata: { workId: work.workId, label: entry.label, amount, serviceCost },
+  });
+
+  return { entry, serviceCost };
+}
+
+export async function deleteWorkCost(costId: string, user: SessionUser) {
+  if (user.role === "AGENT") {
+    throw new Error("Only office staff can manage work costs.");
+  }
+  const entry = await prisma.workCostEntry.findUnique({
+    where: { id: costId },
+    include: { work: { select: { id: true, workId: true, branchId: true, customer: { select: { organizationId: true } } } } },
+  });
+  if (!entry || entry.work.customer.organizationId !== user.organizationId) {
+    throw new Error("Cost entry not found.");
+  }
+  // Agent isolation not needed (agents blocked above); staff sees all org works.
+
+  await prisma.workCostEntry.delete({ where: { id: costId } });
+  const serviceCost = await resyncWorkCost(entry.work.id);
+
+  await logActivity({
+    organizationId: user.organizationId,
+    branchId: entry.work.branchId,
+    userId: user.id,
+    action: "WORK_COST_REMOVED",
+    entity: "Work",
+    entityId: entry.work.id,
+    metadata: { workId: entry.work.workId, label: entry.label, amount: entry.amount, serviceCost },
+  });
+
+  return { id: costId, serviceCost };
 }
 
 export async function deleteWorkFile(

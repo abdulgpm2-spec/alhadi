@@ -67,6 +67,8 @@ export async function POST(req: NextRequest) {
       uploadRequired: body.uploadRequired !== undefined ? Boolean(body.uploadRequired) : false,
       customerPrice: price,
       agentPrice: body.agentPrice !== undefined ? Number(body.agentPrice) : 0,
+      govtFee: body.govtFee !== undefined ? Number(body.govtFee) : 0,
+      otherCost: body.otherCost !== undefined ? Number(body.otherCost) : 0,
       estimatedDays: body.estimatedDays !== undefined ? Number(body.estimatedDays) : 3,
       description: body.description,
       employeeInstructions: body.employeeInstructions,

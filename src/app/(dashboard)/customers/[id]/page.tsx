@@ -214,6 +214,10 @@ export default function CustomerProfilePage() {
   const totalBilled = (customer.works || []).reduce((acc: number, w: any) => acc + w.totalAmount, 0);
   const totalPaid = (customer.payments || []).reduce((acc: number, p: any) => acc + p.amount, 0);
   const totalPending = Math.max(0, totalBilled - totalPaid);
+  const totalProfit = (customer.works || []).reduce(
+    (acc: number, w: any) => acc + ((Number(w.totalAmount) || 0) - (Number(w.serviceCost) || 0)),
+    0
+  );
 
   return (
     <div className="space-y-6">
@@ -320,8 +324,8 @@ export default function CustomerProfilePage() {
           </div>
         </div>
 
-        {/* Financial Summary Bar */}
-        <div className="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-slate-100 text-center">
+        {/* Financial Summary Bar (profit hidden from agents) */}
+        <div className={`grid grid-cols-2 ${me?.role === "AGENT" ? "sm:grid-cols-3" : "sm:grid-cols-4"} gap-3 mt-6 pt-5 border-t border-slate-100 text-center`}>
           <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
             <span className="text-[11px] font-medium text-slate-500 block">Total Work Orders</span>
             <span className="text-base font-bold text-slate-900">{customer.works?.length || 0}</span>
@@ -334,6 +338,14 @@ export default function CustomerProfilePage() {
             <span className="text-[11px] font-medium text-rose-700 block">Pending Outstanding</span>
             <span className="text-base font-bold text-rose-800">{formatCurrency(totalPending)}</span>
           </div>
+          {me?.role !== "AGENT" && (
+            <div className="p-2.5 rounded-lg bg-sky-50/60 border border-sky-100" title="Billed minus service cost across all orders">
+              <span className="text-[11px] font-medium text-sky-700 block">Profit / Loss</span>
+              <span className={`text-base font-bold ${totalProfit >= 0 ? "text-sky-800" : "text-rose-800"}`}>
+                {formatCurrency(totalProfit)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

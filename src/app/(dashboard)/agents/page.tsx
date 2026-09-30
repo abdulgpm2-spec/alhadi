@@ -233,6 +233,15 @@ export default function AgentsPage() {
                   </div>
                 </div>
 
+                <div className="flex items-center justify-between px-2.5 py-2 rounded-lg bg-emerald-50/60 border border-emerald-100 text-xs" title="Billed minus service cost across this agent's orders">
+                  <span className="font-semibold text-slate-600">
+                    Profit <span className="font-normal text-slate-400">(cost {formatCurrency(ag.totalCost || 0)})</span>
+                  </span>
+                  <span className={`font-black ${(ag.profit || 0) >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
+                    {formatCurrency(ag.profit || 0)}
+                  </span>
+                </div>
+
                 <div className="pt-2 flex justify-between items-center text-[11px] text-slate-400 border-t border-slate-100">
                   <span>Revenue: {formatCurrency(ag.totalRevenue)}</span>
                   <span>Registered {formatDate(ag.createdAt)}</span>
